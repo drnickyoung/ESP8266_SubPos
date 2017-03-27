@@ -60,6 +60,7 @@ uint8_t packet_buffer[packetSize] = {
                 /*34*/  0x11, 0x04, 
                 
                 /*36*/  0x00, 0x1f, /* SSID Element ID and Length of SSID */
+                                    /* 1f = 31 bytes long */
                 
                 /*38*/  0x01, 0x01, 0x01, 0x01, 0x01, 0x01, /* SSID Octets */
                 /*44*/  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
@@ -102,14 +103,29 @@ void setup() {
   char *encoded_string = encode_ssid(encode_data);
   
 #ifdef _DEBUG
-  
-  Serial.println("SSID: "); 
+  Serial.println(" ");
+  Serial.print("SSID: "); 
   for(int i = 0; i < 31; i++)
     Serial.print(encoded_string[i]); 
   
   Serial.println(" ");
   Serial.println("Setup done");
 #endif
+ 
+  //Now copy SSID to packet
+  int j=0;
+  for(int i=38; i<=68; i++) {
+    if(encoded_string[j] == '\"')
+    { 
+      //break;
+      packet_buffer[i] = '?';
+    }
+    else
+    {
+      packet_buffer[i] = encoded_string[j];
+    }
+    j++;
+  }
 }
 
 /**************
@@ -117,19 +133,30 @@ void setup() {
  * *************/
 void loop() {
   beacon();
-  delay(500);
+  delay(100);
 }
 
 /* Sends beacon packets. */
 void beacon()
 {
   byte channel = random(1,12); 
+  
+  packet_buffer[81] = (unsigned char)channel;
   wifi_set_channel(channel);
 
 #ifdef _DEBUG
-  Serial.println("Channel: ");
+  Serial.println(" ");
+  Serial.print("Channel: ");
   Serial.println(channel);
 #endif    
+
+#ifdef _DEBUG
+  Serial.print("Packet: "); 
+  for(int i = 0; i < 82; i++)
+    printf("0x%02x ", packet_buffer[i]);
+    //Serial.print(packet_buffer[i]); 
+  
+#endif
     
   int i = wifi_send_pkt_freedom(packet_buffer, packetSize, 0);
   uint32_t timestamp = (uint32_t)packet_buffer[27] << 24 | (uint32_t)packet_buffer[26] << 16 |(uint32_t)packet_buffer[25] << 8 | packet_buffer[24];
