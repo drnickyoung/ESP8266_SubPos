@@ -26,31 +26,60 @@ void setup() {
   
   //Test data
   encode_data.dev_id      = 99;
-  encode_data.lat         = 891234567;
-  encode_data.lng         = 997654321;
-  encode_data.altitude    = 12345678;
-  encode_data.tx_pwr      = -900;
+  encode_data.lat         = 50.5;
+  encode_data.lng         = -1.3;
+  encode_data.altitude    = 100;
+  encode_data.tx_pwr      = -90;
   encode_data.off_map     = 1;
   encode_data.three_d_map = 1;
   encode_data.path_loss   = 2;
   encode_data.res         = 0x2f;
   encode_data.app_id      = 99;
 
+  //\x53\x50\x53\x01\x01\x63\x35\x24\x69\x01\x6b\x49\x52\x01\x01\x01\x63\x2f\x18\x53\x18\x01\x40\x2f\x06\x10\x08\x61\x0e\x04\x01
  
   
   //Create location SSID here
   encoded_string = encode_ssid(encode_data);
 
 #ifdef _DEBUG
-  //SubPos set SSID to a fixed 31 bytes
-  
+  //SubPos sets SSID to a fixed 31 bytes
+  printf("Raw Data\n------------\n");
+  printf("Device ID    : %u\n", encode_data.dev_id  );
+  printf("Latitude     : %d\n", encode_data.lat     );
+  printf("Longitude    : %d\n", encode_data.lng     );
+  printf("Altitude     : %d\n", encode_data.altitude);
+  printf("Tx Power     : %d\n", encode_data.tx_pwr  );
+  printf("Alt Mapping  : %d\n", encode_data.off_map );
+  printf("3D Mapping   : %d\n", encode_data.three_d_map );
+  printf("Path Loss    : %d\n", encode_data.path_loss );
+  printf("Reserved     : %x\n", encode_data.res     );
+  printf("App ID       : %u\n", encode_data.app_id );
+
   Serial.println(" ");
   Serial.print("SSID: "); 
-  for(int i = 0; i < 31; i++)
-    Serial.print(encoded_string[i]); 
+  for(int i = 0; i < 31; i++){
+    printf("\\x%02X",encoded_string[i]); 
+  }
   
   Serial.println(" ");
   Serial.println("Setup done");
+
+  //now decode
+  struct sps_data decoded_data;
+  decoded_data   = decode_ssid(encoded_string);
+  
+  printf("Decoded SSID\n------------\n");
+  printf("Device ID    : %u\n", decoded_data.dev_id  );
+  printf("Latitude     : %d\n", decoded_data.lat     );
+  printf("Longitude    : %d\n", decoded_data.lng     );
+  printf("Altitude     : %d\n", decoded_data.altitude);
+  printf("Tx Power     : %d\n", decoded_data.tx_pwr  );
+  printf("Alt Mapping  : %d\n", decoded_data.off_map );
+  printf("3D Mapping   : %d\n", encode_data.three_d_map );
+  printf("Path Loss    : %d\n", encode_data.path_loss );
+  printf("Reserved     : %x\n", decoded_data.res     );
+  printf("App ID       : %u\n", decoded_data.app_id ); 
 #endif
 
 }
@@ -266,3 +295,97 @@ char * encode_ssid(struct sps_data encode_data){
   return encoded_string;
 };
 
+#ifdef _DEBUG
+struct sps_data decode_ssid(char* str_decode){
+  
+  //Make string "safe" 
+  uint8_t ssid[31] = {}; //SSID can be 32 octets, but we will ignore 
+                         //the last octet as some embedded systems
+               //don't implement it
+  memcpy(ssid, str_decode, 31);
+  
+  struct sps_data decoded_data;
+  
+
+  //Check coding bits and reconstruct data
+  //we don't have to extract and check the coding mask bits
+  //if we work from the right
+    
+  int x;
+  int y = 0;
+
+  for (x = 30; x >= 24; x--)
+  {
+    if (((ssid[30] >> y) & 0x1) == 1)
+      ssid[x] = ssid[x] - 1;
+    y++;
+  }
+    
+    y = 0;
+  for (x = 23; x >= 17; x--)
+  {
+    if (((ssid[29] >> y) & 0x1) == 1)
+      ssid[x] = ssid[x] - 1;
+    y++;
+  }
+  
+  y = 0;
+  for (x = 16; x >= 10; x--)
+  {
+    if (((ssid[28] >> y) & 0x1) == 1)
+      ssid[x] = ssid[x] - 1;
+    y++;
+  }
+  
+  y = 0;
+  for (x = 9; x >= 3; x--)
+  {
+    if (((ssid[27] >> y) & 0x1) == 1)
+      ssid[x] = ssid[x] - 1;
+    y++;
+  }
+    
+    //Now pull out the "ASCII" mask
+    y = 0;
+  for (x = 23; x >= 17; x--)
+  {
+    if (((ssid[26] >> y) & 0x1) == 1)
+      ssid[x] = ssid[x] | 0x80;
+    y++;
+  }
+    
+    y = 0;
+  for (x = 16; x >= 10; x--)
+  {
+    if (((ssid[25] >> y) & 0x1) == 1)
+      ssid[x] = ssid[x] | 0x80;
+    y++;
+  }
+    
+    y = 0;
+  for (x = 9; x >= 3; x--)
+  {
+    if (((ssid[24] >> y) & 0x1) == 1)
+      ssid[x] = ssid[x] | 0x80;
+    y++;
+  }
+  
+  //Now we can easily populate the struct
+
+  decoded_data.dev_id     = ssid[ 3] << 16 | ssid[ 4] <<  8 | ssid[ 5];
+  decoded_data.lat      = ssid[ 6] << 24 | ssid[ 7] << 16 | ssid[ 8] <<  8 | ssid[ 9];
+  decoded_data.lng      = ssid[10] << 24 | ssid[11] << 16 | ssid[12] <<  8 | ssid[13];
+  decoded_data.app_id     = ssid[14] << 16 | ssid[15] <<  8 | ssid[16];  
+  decoded_data.altitude   = ssid[17] << 18 | ssid[18] << 10 | ssid[19] <<  2 | ((ssid[20] >> 6) & 0x03);
+    if (((ssid[20] & 0x20) >> 5) & 1) decoded_data.altitude = (decoded_data.altitude * -1);
+  decoded_data.off_map    = ((ssid[20] & 0x10) >> 4) & 1;
+  decoded_data.three_d_map  = ((ssid[20] & 0x08) >> 3) & 1;
+  decoded_data.tx_pwr     = ((ssid[20] & 0x07) << 8) | ssid[21];
+    decoded_data.tx_pwr         = decoded_data.tx_pwr - 1000;
+    decoded_data.path_loss    = ( ssid[22] & 0xE0) >> 5;  
+    decoded_data.res      = (ssid[22]  & 0x1F  << 8) | ssid[23];
+  
+  return decoded_data;
+  
+};
+#endif
