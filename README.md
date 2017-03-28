@@ -5,13 +5,11 @@ I have started to work through the SubPos Node code (see subpos.org). That runs 
 
 ## Progress
 
-### 26 March 2017
+Code works and broadcasts. 
 
-Messy code I know but more interested to get it working and then worry about enchancing the code. At present it generates a beacon frame on a random channel and transmits it. Wireshark detects it althoug it cannot decode it. I have not yet coded a decoder. 
-
-### Todo
-- [ ] Keeps crashing, need to sort
+## Todo
+- [x] Keeps crashing, need to sort
 - [ ] Port ISR code over rather than a loop to call beacon code.
-- [ ] Port spread spectrum / frequency hoping over.
+- [x] Port spread spectrum / frequency hoping over.
 - [ ] Port USB config over.
 - [ ] Code a receiever/decoder.
