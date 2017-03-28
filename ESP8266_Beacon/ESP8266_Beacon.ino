@@ -1,90 +1,27 @@
 /*
- * Sketch to transmit node location via SSID beacon.
- * This is a clone of the SubPos project (see subpos.org)
- * but runs via Arduino IDE directly on an ESP8266.
+ * Aim is to implement SubPos using Beacon frames for ESP8266 using the Arduino IDE
  * 
- * Developed by N.Young 26/3/17, www.nickbits.co.uk
+ * Based on http://nomartini-noparty.blogspot.co.uk/2016/07/esp8266-and-beacon-frames.html
  */
 
+#include <ESP8266WiFi.h> //more about beacon frames https://mrncciew.com/2014/10/08/802-11-mgmt-beacon-frame/
+#include "SSID_Coding.h"
 
-/*
- * Basic WiFi library
- * WiFi docs - https://github.com/esp8266/Arduino/blob/master/doc/esp8266wifi/readme.md
- */
-#include <ESP8266WiFi.h>
-
-//Needed for wifi_send_pkt_freedom
 extern "C" {
   #include "user_interface.h"
 }
 
-/*
- * Globals
- */
-//The tag is always valid SSID charset
-static const unsigned char tag[] = "SPS";  
-static const uint32_t beacon_rate = 100; //Default 100TU
-
-#define packetSize 82
 #define _DEBUG TRUE
 
-//SPS SSID data structure 248 bits total
-struct sps_data {
-  uint32_t      dev_id;      //24 bit
-  int32_t       lat;         //32 bit
-  int32_t       lng;         //32 bit
-  int32_t       altitude;    //26 bit (with extra sign bit)
-  int16_t       tx_pwr;      //11 bit
-  bool          off_map;     //1  bit
-  bool          three_d_map; //1  bit
-  uint16_t      res;         //12 bit
-  uint32_t      app_id;      //24 bit
-  uint8_t       path_loss;   //3  bit
-};
-
-// Beacon Packet buffer
-//http://mrncciew.com/2014/10/08/802-11-mgmt-beacon-frame/                
-uint8_t packet_buffer[packetSize] = { 
-                0x80, 0x00, /* frame control */
-                0x00, 0x00, /* duration */               
-                /*4*/   0xff, 0xff, 0xff, 0xff, 0xff, 0xff,  /* DST MAC (Broadcast)*/                
-                /*10*/  0x01, 0x02, 0x03, 0x04, 0x05, 0x06,  /* SRC MAC */
-                /*16*/  0x01, 0x02, 0x03, 0x04, 0x05, 0x06,  /* BSSID */
-                /*22*/  0xc0, 0x6c, /* Timestamp */
-                /*24*/  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* Timestamp */
-                /*32*/  0x64, 0x00, /* Beacon Interval */
-                
-                /* Capability Info; set WEP so open networks don't accidentally get 
-                stored in client Wi-Fi list when clicked (open networks allow one 
-                click adding, WEP asks for password first). */ 
-                /*34*/  0x11, 0x04, 
-                
-                /*36*/  0x00, 0x1f, /* SSID Element ID and Length of SSID */
-                                    /* 1f = 31 bytes long */
-                
-                /*38*/  0x01, 0x01, 0x01, 0x01, 0x01, 0x01, /* SSID Octets */
-                /*44*/  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-                /*50*/  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-                /*56*/  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-                /*62*/  0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 
-                /*68*/  0x01,
-                
-                /*69*/  0x01, 0x08, 0x82, 0x84, /* Config */
-                /*73*/  0x8b, 0x96, 0x24, 0x30, 0x48, 0x6c, 0x03, 0x01, 
-                
-                /*81*/ 0x01}; /* Config */
-
 void setup() {
-  delay(500);
-  
 #ifdef _DEBUG  
   Serial.begin(115200);
-#endif  
-
-  // Set WiFi to station mode and disconnect from any AP it might be connected to 
-  wifi_set_opmode(STATION_MODE);
-  wifi_promiscuous_enable(1);     /* rcv all data */
+#endif 
   
+  delay(500);
+  wifi_set_opmode(STATION_MODE);
+  wifi_promiscuous_enable(1); 
+
   struct sps_data encode_data; 
   
   //Test data
@@ -98,11 +35,15 @@ void setup() {
   encode_data.path_loss   = 2;
   encode_data.res         = 0x2f;
   encode_data.app_id      = 99;
+
+ 
   
   //Create location SSID here
-  char *encoded_string = encode_ssid(encode_data);
-  
+  encoded_string = encode_ssid(encode_data);
+
 #ifdef _DEBUG
+  //SubPos set SSID to a fixed 31 bytes
+  
   Serial.println(" ");
   Serial.print("SSID: "); 
   for(int i = 0; i < 31; i++)
@@ -111,61 +52,82 @@ void setup() {
   Serial.println(" ");
   Serial.println("Setup done");
 #endif
- 
-  //Now copy SSID to packet
-  int j=0;
-  for(int i=38; i<=68; i++) {
-    if(encoded_string[j] == '\"')
-    { 
-      //break;
-      packet_buffer[i] = '?';
-    }
-    else
-    {
-      packet_buffer[i] = encoded_string[j];
-    }
-    j++;
-  }
+
 }
 
-/**************
- * Loop
- * *************/
 void loop() {
-  beacon();
+  sendBeacon("test"); //sends beacon frames with the SSID 'test'
+  sendBeacon(encoded_string);
   delay(100);
 }
 
-/* Sends beacon packets. */
-void beacon()
-{
-  byte channel = random(1,12); 
-  
-  packet_buffer[81] = (unsigned char)channel;
-  wifi_set_channel(channel);
+void sendBeacon(char* ssid) {
+    // Randomize channel //
+    byte channel = 1;//random(1,12); 
+    wifi_set_channel(channel);
 
-#ifdef _DEBUG
-  Serial.println(" ");
-  Serial.print("Channel: ");
-  Serial.println(channel);
-#endif    
+    uint8_t packet[128] = { 0x80, 0x00, //Frame Control 
+                        0x00, 0x00, //Duration
+                /*4*/   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, //Destination address 
+                /*10*/  0x01, 0x02, 0x03, 0x04, 0x05, 0x06, //Source address - overwritten later
+                /*16*/  0x01, 0x02, 0x03, 0x04, 0x05, 0x06, //BSSID - overwritten to the same as the source address
+                /*22*/  0xc0, 0x6c, //Seq-ctl
+                //Frame body starts here
+                /*24*/  0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00, //timestamp - the number of microseconds the AP has been active
+                /*32*/  0xFF, 0x00, //Beacon interval
+                /*34*/  0x01, 0x04, //Capability info
+                /* SSID */
+                /*36*/  0x00
+                };
 
-#ifdef _DEBUG
-  Serial.print("Packet: "); 
-  for(int i = 0; i < 82; i++)
-    printf("0x%02x ", packet_buffer[i]);
-    //Serial.print(packet_buffer[i]); 
-  
-#endif
-    
-  int i = wifi_send_pkt_freedom(packet_buffer, packetSize, 0);
-  uint32_t timestamp = (uint32_t)packet_buffer[27] << 24 | (uint32_t)packet_buffer[26] << 16 |(uint32_t)packet_buffer[25] << 8 | packet_buffer[24];
-  timestamp = timestamp + (beacon_rate * 1000);
-  packet_buffer[24] = (unsigned char)(timestamp & 0xff);
-  packet_buffer[25] = (unsigned char)(timestamp >> 8 & 0xff);
-  packet_buffer[26] = (unsigned char)(timestamp >> 16 & 0xff);
-  packet_buffer[27] = (unsigned char)(timestamp >> 24 & 0xff);
-}         
+    int ssidLen = strlen(ssid);
+
+    //HACK---------------------------------------------------------------
+    //SPS limits this to 31. As strlen seems to have issues on ESP8266
+    //force it
+    if (ssidLen>31)
+      ssidLen=31;
+    //HACK---------------------------------------------------------------  
+      
+    packet[37] = ssidLen;
+
+    for(int i = 0; i < ssidLen; i++) {
+      packet[38+i] = ssid[i];
+    }
+
+    uint8_t postSSID[13] = {0x01, 0x08, 0x82, 0x84, 0x8b, 0x96, 0x24, 0x30, 0x48, 0x6c, //supported rate
+                        0x03, 0x01, 0x04 /*DSSS (Current Channel)*/ };
+
+    for(int i = 0; i < 12; i++) {
+      packet[38 + ssidLen + i] = postSSID[i];
+    }
+
+    packet[50 + ssidLen] = channel;
+
+    //Get true Mac address
+    byte mac[6];
+    WiFi.macAddress(mac);
+    packet[10] = packet[16] = mac[5];
+    packet[11] = packet[17] = mac[4];
+    packet[12] = packet[18] = mac[3];
+    packet[13] = packet[19] = mac[2];
+    packet[14] = packet[20] = mac[1];
+    packet[15] = packet[21] = mac[0];
+    // Randomize SRC MAC
+    /*packet[10] = packet[16] = random(256);
+    packet[11] = packet[17] = random(256);
+    packet[12] = packet[18] = random(256);
+    packet[13] = packet[19] = random(256);
+    packet[14] = packet[20] = random(256);
+    packet[15] = packet[21] = random(256);*/
+
+    int packetSize = 51 + ssidLen;
+
+    wifi_send_pkt_freedom(packet, packetSize, 0);
+    //wifi_send_pkt_freedom(packet, packetSize, 0);
+   //wifi_send_pkt_freedom(packet, packetSize, 0);
+    delay(1);
+}
 
 /*
  * SSID Encoder
@@ -174,7 +136,6 @@ void beacon()
 char * encode_ssid(struct sps_data encode_data){
 
   char *encoded_string = (char *) malloc(sizeof(char) * 31);
-  
   //For the string data, we can just read it raw; nothing fancy here.
   //Encoding SSIDs doesn't happen often.
   
@@ -193,7 +154,7 @@ char * encode_ssid(struct sps_data encode_data){
   encoded_string[ 7] = (encode_data.lat           >> 16) & 0xFF;
   encoded_string[ 8] = (encode_data.lat           >>  8) & 0xFF;
   encoded_string[ 9] = (encode_data.lat                ) & 0xFF;
-  
+
   //Longitude
   encoded_string[10] = (encode_data.lng           >> 24) & 0xFF;
   encoded_string[11] = (encode_data.lng           >> 16) & 0xFF;
@@ -210,18 +171,18 @@ char * encode_ssid(struct sps_data encode_data){
   encoded_string[18] = (abs(encode_data.altitude) >> 10) & 0xFF;
   encoded_string[19] = (abs(encode_data.altitude) >>  2) & 0xFF;
   
-  encoded_string[20] =((abs(encode_data.altitude)        & 0x03) << 6)
+  encoded_string[20] = ((abs(encode_data.altitude)        & 0x03) << 6)
                        | (encode_data.altitude < 0) << 5
                        |  encode_data.off_map       << 4 
-                     |  encode_data.three_d_map   << 3 
-                       |((encode_data.tx_pwr + 1000)>> 8   & 0x07); //Note that tx_power is assumed to be shifted (x10)
+                       |  encode_data.three_d_map   << 3 
+                       | ((encode_data.tx_pwr + 1000)>> 8   & 0x07); //Note that tx_power is assumed to be shifted (x10)
   encoded_string[21] = (encode_data.tx_pwr + 1000)       & 0xFF;
   
 
   encoded_string[22] = (encode_data.path_loss     << 5)  & 0xE0
                      |((encode_data.res >> 8) & 0x1F);
   encoded_string[23] = (encode_data.res               )  & 0xFF;
-  
+
   //Transform encoded string and create "ASCII" 7bit mask
   int x;
   uint32_t ascii_mask = 0; //21 bits (for 21 bytes) to encode
@@ -236,7 +197,7 @@ char * encode_ssid(struct sps_data encode_data){
     }
     //printf("%x\n",ascii_mask);
   }
-    
+  
   //create mask in such a way that we don't have to mask the mask:
   //7 bit coding since we have a nice factor of 7 for num of bytes
   
@@ -256,6 +217,7 @@ char * encode_ssid(struct sps_data encode_data){
   //Note 0x7f can never be encoded out if 0x00 is encoded out.
 
   uint32_t coding_mask = 0;
+  //Offset to 3 as we have knowinly set first 3 to SPS
   for (x = 3; x <= 26; x++)
   {
     if (encoded_string[x] == 0x0a ||
@@ -267,8 +229,9 @@ char * encode_ssid(struct sps_data encode_data){
     {
       coding_mask = (coding_mask << 1) | 1;
       encoded_string[x] = encoded_string[x] + 1;
+ 
     } else {
-      coding_mask = (coding_mask << 1) | 0;
+      coding_mask = (coding_mask << 1) | 0;        
     }
     //printf("%x\n",coding_mask);
   }
@@ -293,14 +256,13 @@ char * encode_ssid(struct sps_data encode_data){
       coding_mask = coding_mask  | (1 << x);
     }   
   }
-  
+ 
   //Encode as 7 bits x4 (28 bytes being masked; neat factor, no wastage, except for the 4 bits which we can't use)
   encoded_string[27] = (coding_mask   >> 21) & 0x7F;
   encoded_string[28] = (coding_mask   >> 14) & 0x7F;
   encoded_string[29] = (coding_mask   >> 7 ) & 0x7F;
   encoded_string[30] = (coding_mask        ) & 0x7F;
-   
+  
   return encoded_string;
 };
-
 
