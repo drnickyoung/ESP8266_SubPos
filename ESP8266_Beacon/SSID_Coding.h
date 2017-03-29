@@ -1,4 +1,7 @@
 //The tag is always valid SSID charset
+//SPS = Version 1
+//SP2 = Version 2 (not yet release).
+
 static const unsigned char tag[] = "SPS";  
 char *encoded_string = NULL;
 

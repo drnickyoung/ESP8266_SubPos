@@ -4,7 +4,8 @@
  * Based on http://nomartini-noparty.blogspot.co.uk/2016/07/esp8266-and-beacon-frames.html
  */
 
-#include <ESP8266WiFi.h> //more about beacon frames https://mrncciew.com/2014/10/08/802-11-mgmt-beacon-frame/
+#include <ESP8266WiFi.h> 
+//more about beacon frames https://mrncciew.com/2014/10/08/802-11-mgmt-beacon-frame/
 #include "SSID_Coding.h"
 
 extern "C" {
@@ -32,7 +33,10 @@ void setup() {
   float lng = -1.3456789;   /* long value (-90 to 90). */
   
   encode_data.dev_id      = 99;               
-  encode_data.altitude    = 100;
+  encode_data.altitude    = 100;  //Should be height of floor relative 
+                                  //to height of mean sea level, not 
+                                  //where the node/access point is mounted, 
+                                  //unless 3D location is enabled. 
   encode_data.tx_pwr      = -90;  /* tx value (-100 to 23dbm) */
   encode_data.off_map     = 1;
   encode_data.three_d_map = 1;
@@ -88,7 +92,7 @@ void setup() {
 
 void loop() {
   //sendBeacon("test"); //sends beacon frames with the SSID 'test'
-  sendBeacon(encoded_string);
+  sendBeacon(encoded_string, 6);
   delay(100);
 }
 
@@ -113,7 +117,9 @@ void sendBeacon(char* ssid,  byte channel) {
                 //Frame body starts here
                 /*24*/  0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00, //timestamp - the number of microseconds the AP has been active
                 /*32*/  0xFF, 0x00, //Beacon interval
-                /*34*/  0x01, 0x04, //Capability info
+                /*34*/  0x11, 0x04, //Capability info 
+                                        // 0x01, 0x04, - Open
+                                        // 0x11, 0x04, - WEP
                 /* SSID */
                 /*36*/  0x00
                 };
@@ -295,7 +301,7 @@ char * encode_ssid(struct sps_data encode_data){
   encoded_string[30] = (coding_mask        ) & 0x7F;
   
   return encoded_string;
-};
+}
 
 #ifdef _DEBUG
 struct sps_data decode_ssid(char* str_decode){
@@ -322,7 +328,7 @@ struct sps_data decode_ssid(char* str_decode){
     y++;
   }
     
-    y = 0;
+  y = 0;
   for (x = 23; x >= 17; x--)
   {
     if (((ssid[29] >> y) & 0x1) == 1)
@@ -347,7 +353,7 @@ struct sps_data decode_ssid(char* str_decode){
   }
     
     //Now pull out the "ASCII" mask
-    y = 0;
+  y = 0;
   for (x = 23; x >= 17; x--)
   {
     if (((ssid[26] >> y) & 0x1) == 1)
@@ -355,7 +361,7 @@ struct sps_data decode_ssid(char* str_decode){
     y++;
   }
     
-    y = 0;
+  y = 0;
   for (x = 16; x >= 10; x--)
   {
     if (((ssid[25] >> y) & 0x1) == 1)
